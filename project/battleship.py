@@ -10,12 +10,12 @@ Contains core data structures and logic for Battleship, including:
 
 import random
 
-BOARD_SIZE = 10
+BOARD_SIZE = 3
 SHIPS = [
-    ("Carrier", 5),
-    ("Battleship", 4),
-    ("Cruiser", 3),
-    ("Submarine", 3),
+   #("Carrier", 5),
+   #("Battleship", 4),
+   #("Cruiser", 3),
+   # ("Submarine", 3),
     ("Destroyer", 2)
 ]
 
@@ -23,18 +23,11 @@ def send(wfile, msg):
     wfile.write(msg + '\n')
     wfile.flush()
 
-def recv(rfile):
-    return rfile.readline().strip()
-
-def send_board(wfile, board):
-    wfile.write("GRID\n")
-    wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
-    for r in range(board.size):
-        row_label = chr(ord('A') + r)
-        row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
-        wfile.write(f"{row_label:2} {row_str}\n")
-    wfile.write('\n')
-    wfile.flush()
+def recv(file):
+    file[0].set()
+    message = file[1].get()
+    file[0].clear()
+    return message
 
 def send_board(wfile, board):
     wfile.write("GRID\n")
@@ -134,7 +127,7 @@ class Board:
                 else:
                     print(f"  [!] Cannot place {ship_name} at {coord_str} (orientation={orientation_str}). Try again.")
 
-    def place_ships_manually_online(self, rfile, wfile, ships=SHIPS):
+    def place_ships_manually_online(self, rfile, wfile, game, ships=SHIPS):
         """
         Prompt the user for each ship's starting coordinate and orientation (H or V).
         Validates the placement; if invalid, re-prompts.
@@ -145,9 +138,16 @@ class Board:
                 self.print_display_grid_online(wfile, show_hidden_board=True)
                 send(wfile, f"\nPlacing your {ship_name} (size {ship_size}).")
                 send(wfile, "Enter starting coordinate (e.g. A1): ")
+
+                if not game.is_set(): return #Check if game is over
                 coord_str = recv(rfile)
+                if not game.is_set(): return #Check if game is over
+
                 send(wfile, "  Orientation? Enter 'H' (horizontal) or 'V' (vertical): ")
+
+                if not game.is_set(): return #Check if game is over
                 orientation_str = recv(rfile).upper()
+                if not game.is_set(): return #Check if game is over
 
                 try:
                     row, col = parse_coordinate(coord_str)
@@ -326,7 +326,7 @@ def parse_coordinate(coord_str):
         raise ValueError("Coordinate too short.")
 
     row_letter = coord_str[0]
-    if (not row_letter.isalpha() or not 'A' <= row_letter <= 'J'):
+    if (not row_letter.isalpha() or not 'A' <= row_letter <= chr(ord('A') + BOARD_SIZE - 1)):
         raise ValueError(f"Invalid row letter: {row_letter}")
 
     col_digits = coord_str[1:]
@@ -456,10 +456,10 @@ def run_single_player_game_online(rfile, wfile):
             send(f"Invalid input: {e}")
 
 
-def run_two_player_game_online(p1, p2):
+def run_two_player_game_online(game, p1, p2):
     
-    conn1, rfile1, wfile1 = p1
-    conn2, rfile2, wfile2 = p2 
+    rfile1, wfile1 = p1
+    rfile2, wfile2 = p2 
 
     send(wfile1, "You are Player 1.")
     send(wfile2, "You are Player 2.")
@@ -471,9 +471,13 @@ def run_two_player_game_online(p1, p2):
     send(wfile2, "Wait for Player 1 to place their ships...")
     send(wfile1, "Place ships manually (M) or randomly (R)? [M/R]: ")
     while True:
+        
+        if not game.is_set(): return #Check if game is over
         Place = recv(rfile1).upper()
+        if not game.is_set(): return #Check if game is over
+
         if Place == 'M':
-            board1.place_ships_manually_online(rfile1, wfile1, SHIPS)
+            board1.place_ships_manually_online(rfile1, wfile1, game, SHIPS)
             break
         elif Place == 'R':
             board1.place_ships_randomly(SHIPS)
@@ -481,12 +485,17 @@ def run_two_player_game_online(p1, p2):
         else:
             send(wfile1, "Invalid input")
     
+    if not game.is_set(): return
     send(wfile1, "Wait for Player 2 to place their ships...")
     send(wfile2, "Place ships manually (M) or randomly (R)? [M/R]: ")
     while True:
+
+        if not game.is_set(): return #Check if game is over
         Place = recv(rfile2).upper()
+        if not game.is_set(): return #Check if game is over
+
         if Place == 'M':
-            board2.place_ships_manually_online(rfile2, wfile2, SHIPS)
+            board2.place_ships_manually_online(rfile2, wfile2, game, SHIPS)
             break
         elif Place == 'R':
             board2.place_ships_randomly(SHIPS)
@@ -500,21 +509,22 @@ def run_two_player_game_online(p1, p2):
     moves = 0
 
     while True:
-
-        #test~ remove~
-        if moves == 99:
-            break
-        #test~ remove~
+        if not game.is_set(): return #Check if game is over
 
         # Player 1 turn
         send_board(wfile1, board2)
         send(wfile2, "Wait for player 1 turn...")
         send(wfile1, "Enter coordinate to fire at (e.g. B5):")
+
+        if not game.is_set(): return #Check if game is over
         guess = recv(rfile1)
+        if not game.is_set(): return #Check if game is over
+        
         send(wfile2, f"Player 1 Inputs: {guess}")
         if guess.lower() == 'quit':
             send(wfile1, "Thanks for playing. Goodbye.")
             send(wfile2, "Player 1 quit the game.")
+            game.clear()
             return
 
         try:
@@ -534,6 +544,7 @@ def run_two_player_game_online(p1, p2):
                     send_board(wfile2, board2)
                     send(wfile1, f"Congratulations! You sank all ships in {moves} moves.")
                     send(wfile2, f"You lose! Player 2 sank all ships in {moves} moves.")
+                    game.clear()
                     return
             elif result == 'miss':
                     send(wfile1, "MISS!")
@@ -544,12 +555,15 @@ def run_two_player_game_online(p1, p2):
         except ValueError as e:
             send(wfile1, f"Invalid input: {e}")
 
-        
         # Player 2 turn
         send_board(wfile2, board1)
         send(wfile1, "Wait for player 2 turn...")
         send(wfile2, "Enter coordinate to fire at (e.g. B5):")
+
+        if not game.is_set(): return #Check if game is over
         guess = recv(rfile2)
+        if not game.is_set(): return #Check if game is over
+
         send(wfile1, f"Player 2 Inputs: {guess}")
         if guess.lower() == 'quit':
             send(wfile2, "Thanks for playing. Goodbye.")
@@ -572,6 +586,7 @@ def run_two_player_game_online(p1, p2):
                     send_board(wfile1, board1)
                     send(wfile2, f"Congratulations! You sank all ships in {moves} moves.")
                     send(wfile1, f"You lose! Player 1 sank all ships in {moves} moves.")
+                    game.clear()
                     return
             elif result == 'miss':
                     send(wfile2, "MISS!")
@@ -581,10 +596,6 @@ def run_two_player_game_online(p1, p2):
                 send(wfile1, "Player 2: You've already fired at that location.")
         except ValueError as e:
             send(wfile2, f"Invalid input: {e}")
-
-    # End
-    send(wfile1, "e61")
-    send(wfile2, "e62")
 
 if __name__ == "__main__":
     # Optional: run this file as a script to test single-player mode

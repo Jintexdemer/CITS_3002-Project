@@ -11,7 +11,7 @@ import socket
 import threading
 
 HOST = '127.0.0.1'
-PORT = 50007
+PORT = 50021
 
 running = True  # Flag to control thread loop
 
@@ -36,6 +36,7 @@ def receive_messages(rfile):
                     print(board_line.strip())
             else:
                 print(line)
+                
         except Exception as e:
             print(f"[ERROR] Exception in receiving messages: {e}")
             break
