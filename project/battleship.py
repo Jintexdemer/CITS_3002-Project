@@ -19,15 +19,30 @@ SHIPS = [
     ("Destroyer", 2)
 ]
 
+def send_to_all_p0_clients(clients, message):
+    for client in clients:
+        if client.get('p') == 0:
+            send(client['wfile'], message)
+
+def send_board_to_all_p0_clients(clients, board):
+    for client in clients:
+        if client.get('p') == 0:
+            send_board(client['wfile'], board)
+
 def send(wfile, msg):
     wfile.write(msg + '\n')
     wfile.flush()
 
-def recv(file):
-    file[0].set()
-    message = file[1].get()
-    file[0].clear()
-    return message
+import queue  # for catching queue.Empty exception
+
+def recv(player_info):
+    player_info['input_flag'].set()
+    try:
+        result = player_info['input_queue'].get(timeout=30)
+    except queue.Empty:
+        result = ""
+    player_info['input_flag'].clear()
+    return result
 
 def send_board(wfile, board):
     wfile.write("GRID\n")
@@ -456,18 +471,29 @@ def run_single_player_game_online(rfile, wfile):
             send(f"Invalid input: {e}")
 
 
-def run_two_player_game_online(game, p1, p2):
+
+
+
+
+
+
+
+
+
+def run_two_player_game_online(game, p1, p2, clients):
     
     rfile1, wfile1 = p1
-    rfile2, wfile2 = p2 
+    rfile2, wfile2 = p2
 
     send(wfile1, "You are Player 1.")
     send(wfile2, "You are Player 2.")
+    send_to_all_p0_clients(clients, "Game has started")
 
     board1 = Board(BOARD_SIZE)
     board2 = Board(BOARD_SIZE)
 
     #Place ships.
+    send_to_all_p0_clients(clients, "Wait for Player 1 to place their ships.")
     send(wfile2, "Wait for Player 1 to place their ships...")
     send(wfile1, "Place ships manually (M) or randomly (R)? [M/R]: ")
     while True:
@@ -486,6 +512,7 @@ def run_two_player_game_online(game, p1, p2):
             send(wfile1, "Invalid input")
     
     if not game.is_set(): return
+    send_to_all_p0_clients(clients, "Player 1 has placed their ships")
     send(wfile1, "Wait for Player 2 to place their ships...")
     send(wfile2, "Place ships manually (M) or randomly (R)? [M/R]: ")
     while True:
@@ -502,7 +529,7 @@ def run_two_player_game_online(game, p1, p2):
             break
         else:
             send(wfile2, "Invalid input")
-
+    send_to_all_p0_clients(clients, "Player 2 has placed their ships")
     send(wfile1, "Welcome to Online Single-Player Battleship! Try to sink all the ships. Type 'quit' to exit.")
     send(wfile2, "Welcome to Online Single-Player Battleship! Try to sink all the ships. Type 'quit' to exit.")
 
@@ -513,6 +540,7 @@ def run_two_player_game_online(game, p1, p2):
 
         # Player 1 turn
         send_board(wfile1, board2)
+        send_to_all_p0_clients(clients, "Waiting for player 1 turn...")
         send(wfile2, "Wait for player 1 turn...")
         send(wfile1, "Enter coordinate to fire at (e.g. B5):")
 
@@ -521,9 +549,11 @@ def run_two_player_game_online(game, p1, p2):
         if not game.is_set(): return #Check if game is over
         
         send(wfile2, f"Player 1 Inputs: {guess}")
+        send_to_all_p0_clients(clients, f"Player 1 Inputs: {guess}")
         if guess.lower() == 'quit':
             send(wfile1, "Thanks for playing. Goodbye.")
             send(wfile2, "Player 1 quit the game.")
+            send_to_all_p0_clients(clients, "Player 1 quit the game.")
             game.clear()
             return
 
@@ -534,14 +564,18 @@ def run_two_player_game_online(game, p1, p2):
 
             if result == 'hit':
                 if sunk_name:
+                    send_to_all_p0_clients(clients, f"HIT! Player 1 sank the {sunk_name}!")
                     send(wfile1, f"HIT! You sank the {sunk_name}!")
                     send(wfile2, f"HIT! Player 1 sank the {sunk_name}!")
                 else:
+                    send_to_all_p0_clients(clients, "Player 1: HIT!")
                     send(wfile1, "HIT!")
                     send(wfile2, "Player 1: HIT!")
                 if board2.all_ships_sunk():
                     send_board(wfile1, board2)
                     send_board(wfile2, board2)
+                    send_board_to_all_p0_clients(clients, board2)
+                    send_to_all_p0_clients(clients, f"Player 2 sank all ships in {moves} moves.")
                     send(wfile1, f"Congratulations! You sank all ships in {moves} moves.")
                     send(wfile2, f"You lose! Player 2 sank all ships in {moves} moves.")
                     game.clear()
@@ -549,14 +583,20 @@ def run_two_player_game_online(game, p1, p2):
             elif result == 'miss':
                     send(wfile1, "MISS!")
                     send(wfile2, "Player 1: MISS!")
+                    send_to_all_p0_clients(clients, "Player 1: MISS!")
             elif result == 'already_shot':
                 send(wfile1, "You've already fired at that location.")
                 send(wfile2, "Player 1: You've already fired at that location.")
+                send_to_all_p0_clients(clients, "Player 1: You've already fired at that location.")
         except ValueError as e:
             send(wfile1, f"Invalid input: {e}")
+        
+        send_board_to_all_p0_clients(clients, board2)
 
         # Player 2 turn
+        
         send_board(wfile2, board1)
+        send_to_all_p0_clients(clients, "Waiting for player 2 turn...")
         send(wfile1, "Wait for player 2 turn...")
         send(wfile2, "Enter coordinate to fire at (e.g. B5):")
 
@@ -565,9 +605,11 @@ def run_two_player_game_online(game, p1, p2):
         if not game.is_set(): return #Check if game is over
 
         send(wfile1, f"Player 2 Inputs: {guess}")
+        send_to_all_p0_clients(clients, f"Player 2 Inputs: {guess}")
         if guess.lower() == 'quit':
             send(wfile2, "Thanks for playing. Goodbye.")
             send(wfile1, "Player 2 quit the game.")
+            send_to_all_p0_clients(clients, "Player 2 quit the game.")
             return
         
         try:
@@ -578,25 +620,35 @@ def run_two_player_game_online(game, p1, p2):
                 if sunk_name:
                     send(wfile2, f"HIT! You sank the {sunk_name}!")
                     send(wfile1, f"HIT! Player 2 sank the {sunk_name}!")
+                    send_to_all_p0_clients(clients,f"HIT! Player 2 sank the {sunk_name}!")
                 else:
                     send(wfile2, "HIT!")
                     send(wfile1, "Player 2: HIT!")
+                    send_to_all_p0_clients(clients, "Player 2: HIT!")
                 if board1.all_ships_sunk():
                     send_board(wfile2, board1)
                     send_board(wfile1, board1)
+                    send_board_to_all_p0_clients(clients, board1)
                     send(wfile2, f"Congratulations! You sank all ships in {moves} moves.")
                     send(wfile1, f"You lose! Player 1 sank all ships in {moves} moves.")
+                    send_to_all_p0_clients(clients, f"Player 1 sank all ships in {moves} moves.")
                     game.clear()
                     return
             elif result == 'miss':
                     send(wfile2, "MISS!")
                     send(wfile1, "Player 2: MISS!")
+                    send_to_all_p0_clients(clients, "Player 2: MISS!")
             elif result == 'already_shot':
                 send(wfile2, "You've already fired at that location.")
                 send(wfile1, "Player 2: You've already fired at that location.")
+                send_to_all_p0_clients(clients, "Player 2: You've already fired at that location.")
         except ValueError as e:
             send(wfile2, f"Invalid input: {e}")
+        
+        send_board_to_all_p0_clients(clients, board1)
+
 
 if __name__ == "__main__":
     # Optional: run this file as a script to test single-player mode
     run_single_player_game_locally()
+
