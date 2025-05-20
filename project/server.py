@@ -83,6 +83,19 @@ def spectator_announcer():
                 except:
                     continue
 
+# Function for handling the "CHAT" Feature
+def send_all(username, message):
+    for c in clients:
+        # Don't send to self
+        if c['username'] == username:
+            continue
+        else:
+            try:
+                # Send the message along with the senders username to all clients
+                c['wfile'].write(f"{username}: {message}\n")
+                c['wfile'].flush()
+            except:
+                continue
 
 def handle_client(client_info):
     rfile = client_info['rfile']
@@ -97,8 +110,13 @@ def handle_client(client_info):
             if not line:
                 break
             line = line.strip()
-
-            if client_info['p'] == 0:
+            
+            # Check if input is the "CHAT" command, call send_all if so
+            if line[0:5] == "CHAT ":
+                message = line[5:]
+                username = client_info['username']
+                send_all(username,message)
+            elif client_info['p'] == 0:
                 wfile.write("You are spectating.\n")
                 wfile.flush()
             elif not game_active.is_set():
