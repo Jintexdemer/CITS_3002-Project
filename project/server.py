@@ -72,7 +72,7 @@ def spectator_announcer():
         if not next1 or not next2:
             continue
 
-        msg = f"[INFO] After actve game ends: Next game will be between: {next1} and {next2}\n"
+        msg = f"[INFO] After active game ends: Next game will be between: {next1} and {next2}\n"
 
         # Send to all spectators
         for c in clients:
