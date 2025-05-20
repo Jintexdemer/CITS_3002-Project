@@ -1,5 +1,10 @@
 """
-Havent done reconnect support
+Bugs:
+first input is delayed one line for all clients.
+
+doesnt add players back into client pool after game.
+
+spectating cannot like do anything.
 """
 
 
@@ -10,6 +15,9 @@ from battleship import run_two_player_game_online
 
 HOST = '127.0.0.1'
 PORT = 50045
+
+disconnected_players = []
+RECONNECT_TIMEOUT = 60
 
 # Game state flags
 new_game = threading.Event()
@@ -200,8 +208,51 @@ def lobby_manager():
 
             new_game.set()
 
-def main():
+
+
+
+def initialize_client(conn, addr):
     global client_id_counter
+    print(f"[INFO] Initializing client from {addr}")
+
+    try:
+        rfile = conn.makefile('r')
+        wfile = conn.makefile('w')
+
+        wfile.write("Enter your username:\n")
+        wfile.flush()
+        username = rfile.readline().strip()
+        p = 0
+
+        client_info = {
+            'client_id': client_id_counter,
+            'username': username,
+            'p': p,
+            'input_queue': Queue(),
+            'rfile': rfile,
+            'wfile': wfile,
+            'conn': conn,
+            'input_flag': input_status_flags[0],
+        }
+
+        clients.append(client_info)
+        id_queue.put(client_id_counter)
+
+        wfile.write(f"Welcome, {username}!\n")
+        wfile.flush()
+
+        threading.Thread(target=handle_client, args=(client_info,), daemon=True).start()
+        client_id_counter += 1
+
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize client from {addr}: {e}")
+        try:
+            conn.close()
+        except:
+            pass
+
+
+def main():
     print(f"[INFO] Server starting at {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.bind((HOST, PORT))
@@ -210,30 +261,11 @@ def main():
         threading.Thread(target=lobby_manager, daemon=True).start()
 
         while True:
-            conn, addr = server.accept()
-            print(f"[INFO] Connection from {addr}")
-
-            rfile = conn.makefile('r')
-            wfile = conn.makefile('w')
-
-            client_info = {
-                'client_id': client_id_counter,
-                'p': 0,
-                'input_queue': Queue(),
-                'rfile': rfile,
-                'wfile': wfile,
-                'conn': conn,
-                'input_flag': input_status_flags[0],
-            }
-            clients.append(client_info)
-            id_queue.put(client_id_counter)
-
-            wfile.write("Welcome to battleship server \n")
-            wfile.flush()
-            
-            threading.Thread(target=handle_client, args=(client_info,), daemon=True).start()
-
-            client_id_counter += 1
+            try:
+                conn, addr = server.accept()
+                threading.Thread(target=initialize_client, args=(conn, addr), daemon=True).start()
+            except Exception as e:
+                print(f"[ERROR] Error accepting new connection: {e}")
 
 
 if __name__ == '__main__':
