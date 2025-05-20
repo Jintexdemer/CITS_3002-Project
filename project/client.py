@@ -1,17 +1,9 @@
-"""
-client.py
-
-Connects to a Battleship server which runs the single-player game.
-Simply pipes user input to the server, and prints all server responses.
-
-TODO: Fix the message synchronization issue using concurrency (Tier 1, item 1).
-"""
 
 import socket
 import threading
 
 HOST = '127.0.0.1'
-PORT = 50045
+PORT = 50046
 
 running = True  # Flag to control thread loop
 
@@ -55,7 +47,7 @@ def main():
 
         try:
             while True:
-                user_input = input(">> ")
+                user_input = input("")
                 wfile.write(user_input + '\n')
                 wfile.flush()
         except KeyboardInterrupt:
