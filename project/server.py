@@ -1,7 +1,15 @@
+"""
+NEED TO ADD:
+RECONNECT FUNCTIONAILTY
+COMMENTS
+"""
+
+
 import socket
 import threading
 from queue import Queue
 from battleship import run_two_player_game_online
+import time
 
 HOST = '127.0.0.1'
 PORT = 50045
@@ -24,6 +32,56 @@ player1 = None
 player2 = None
 
 client_id_counter = 0
+
+def spectator_announcer():
+    while True:
+        time.sleep(15)
+        if not game_active.is_set():
+            continue
+
+        # Clean invalid IDs from queue
+        while not id_queue.empty():
+            id_list = list(id_queue.queue)
+            valid_ids = [c['client_id'] for c in clients]
+            if id_list[0] not in valid_ids:
+                id_queue.get()  # remove invalid client
+            else:
+                break  # first one is valid, continue
+
+        id_list = list(id_queue.queue)
+        next1 = next2 = None
+
+        # Determine next players
+        if len(id_list) >= 2:
+            cid1, cid2 = id_list[0], id_list[1]
+        elif len(id_list) == 1:
+            cid1 = id_list[0]
+            cid2 = player2['client_id'] if player2 else None
+        else:
+            cid1 = player1['client_id'] if player1 else None
+            cid2 = player2['client_id'] if player2 else None
+
+        # Get usernames
+        for c in clients:
+            if c['client_id'] == cid1:
+                next1 = c['username']
+            if c['client_id'] == cid2:
+                next2 = c['username']
+
+        # If still missing info, skip this cycle
+        if not next1 or not next2:
+            continue
+
+        msg = f"[INFO] After actve game ends: Next game will be between: {next1} and {next2}\n"
+
+        # Send to all spectators
+        for c in clients:
+            if c['p'] == 0:
+                try:
+                    c['wfile'].write(msg)
+                    c['wfile'].flush()
+                except:
+                    continue
 
 
 def handle_client(client_info):
@@ -185,16 +243,17 @@ def lobby_manager():
             for client in clients:
                 client['p'] = 0
 
-            # Put players back into the client queue
-            if player1 is not None:
-                if player1 in clients:
-                    id_queue.put(player1['client_id'])
-                player1 = None
             
+            # Put players back into the client queue
             if player2 is not None:
                 if player2 in clients:
                     id_queue.put(player2['client_id'])
                 player2 = None
+            
+            if player1 is not None:
+                if player1 in clients:
+                    id_queue.put(player1['client_id'])
+                player1 = None
 
             new_game.set()
 
@@ -249,6 +308,8 @@ def main():
         server.listen(8)
         new_game.set()
         threading.Thread(target=lobby_manager, daemon=True).start()
+        threading.Thread(target=spectator_announcer, daemon=True).start()
+
 
         while True:
             try:
@@ -362,4 +423,5 @@ if both are full and new game is set:
     run_two_player_game_online(player 1, player 2)
 :<-loop
 """
+
 
