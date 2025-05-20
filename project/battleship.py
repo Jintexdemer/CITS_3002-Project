@@ -10,12 +10,12 @@ Contains core data structures and logic for Battleship, including:
 
 import random
 
-BOARD_SIZE = 3
+BOARD_SIZE = 10
 SHIPS = [
-   #("Carrier", 5),
-   #("Battleship", 4),
-   #("Cruiser", 3),
-   # ("Submarine", 3),
+   ("Carrier", 5),
+   ("Battleship", 4),
+   ("Cruiser", 3),
+    ("Submarine", 3),
     ("Destroyer", 2)
 ]
 
