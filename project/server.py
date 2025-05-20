@@ -21,8 +21,8 @@ input_status_flags = [threading.Event(), threading.Event(), threading.Event()]
         # input_queue:  queue of client inputs 
         # rfile:        read socket connection
         # wfile:        write socket connection
-        # conn:         
-        # input_flag:
+        # conn:         connection object
+        # input_flag:   set when server expects and accepts input from clients
 clients = []
 
 # Queue containing clients 
@@ -35,6 +35,8 @@ player2 = None
 # Unqiue client identifier
 client_id_counter = 0
 
+
+# Continually announces who is next in line for a game
 def spectator_announcer():
     while True:
         time.sleep(15)
@@ -101,6 +103,7 @@ def send_all(username, message):
             except:
                 continue
 
+# Handles inputs from all client connections
 def handle_client(client_info):
     rfile = client_info['rfile']
     wfile = client_info['wfile']
@@ -120,27 +123,34 @@ def handle_client(client_info):
                 message = line[5:]
                 username = client_info['username']
                 send_all(username,message)
+
+            # If client is a spectator, notify them
             elif client_info['p'] == 0:
                 wfile.write("You are spectating.\n")
                 wfile.flush()
+
+            # If the game hasn't started yet, notify them
             elif not game_active.is_set():
                 wfile.write("Waiting for players to join...\n")
                 wfile.flush()
+
+            # If server expects client's input then it is accepted
             elif client_info['input_flag'].is_set():
                 client_info['input_queue'].put(line)
+            # Unaccepted input means it's not the clients turn
             else:
                 wfile.write("You cannot input right now.\n")
                 wfile.flush()
 
+    # Client connection has been interupted
     except (socket.timeout, ConnectionResetError, BrokenPipeError) as e:
         print(f"[ERROR] Client {client_id} disconnected or error: {e}")
     except Exception as e:
         print(f"[ERROR] Unexpected error with client {client_id}: {e}")
     finally:
-        cleanup_disconnect(client_info)
+        cleanup_disconnect(client_info) # Cleanup process called.
 
-
-
+# Handles disconnecting client cleanup
 def cleanup_disconnect(client_info):
     global player1, player2
 
@@ -214,39 +224,56 @@ def cleanup_disconnect(client_info):
     elif client_info['p'] == 2:
         player2 = None
 
+# Handles the current state of the lobby, assigning players and starting games.
 def lobby_manager():
     global player1, player2
     while True:
+
+        # Assign player 1 if available
         if player1 is None and not id_queue.empty()  and new_game.is_set():
             print(f"[INFO] Player 1 added")
             print(f"{list(id_queue.queue)}")
+
+            # Get client ID for whom is next in queue
             client_id = id_queue.get()
             print(f"{client_id}")
+
+            # Find the corresponding client from that ID
             client = next((c for c in clients if c['client_id'] == client_id), None)
             if client is None:
                 print(f"[WARN] Skipping missing client_id: {client_id}")
                 continue 
+
+            # Assign client as Player 1 and set their input controls
             client['p'] = 1
             client['input_flag'] = input_status_flags[1]
-            client['input_queue'].empty()
+            client['input_queue'].empty() # Clear any leftover input
             player1 = client
             continue
-
+        
+        # Assign player 2 if available
         if player2 is None and not id_queue.empty() and new_game.is_set():
             print(f"[INFO] Player 2 added")
             print(f"{list(id_queue.queue)}")
+
+            # Get client ID for whom is next in queue
             client_id = id_queue.get()
             print(f"{client_id}")
+
+            # Find the corresponding client from that ID
             client = next((c for c in clients if c['client_id'] == client_id), None)
             if client is None:
                 print(f"[WARN] Skipping missing client_id: {client_id}")
                 continue 
+
+            # Assign client as Player 2 and set their input controls
             client['p'] = 2
             client['input_flag'] = input_status_flags[2]
             client['input_queue'].empty()
             player2 = client
             continue
 
+        # Start game when both players exist and server is ready
         if player1 and player2 and new_game.is_set():
             new_game.clear()
             game_active.set()
@@ -280,20 +307,20 @@ def lobby_manager():
             new_game.set()
 
 
-
-
+# Handles Incomming clients assinging their information
 def initialize_client(conn, addr):
     global client_id_counter
     print(f"[INFO] Initializing client from {addr}")
 
     try:
+        # Retrieve client information and append to client list
         rfile = conn.makefile('r')
         wfile = conn.makefile('w')
 
         wfile.write("Enter your username:\n")
         wfile.flush()
         username = rfile.readline().strip()
-        p = 0
+        p = 0 # Start client as spectator
 
         client_info = {
             'client_id': client_id_counter,
@@ -307,11 +334,12 @@ def initialize_client(conn, addr):
         }
 
         clients.append(client_info)
-        id_queue.put(client_id_counter)
+        id_queue.put(client_id_counter)  # Adds client to queue to join game
 
         wfile.write(f"Welcome, {username}!\n")
         wfile.flush()
 
+        # Pass client informaiton to thread that handles all client inputs
         threading.Thread(target=handle_client, args=(client_info,), daemon=True).start()
         client_id_counter += 1
 
@@ -324,15 +352,16 @@ def initialize_client(conn, addr):
 
 
 def main():
+    # Create TCP/IP socket and then start listeing for new client connections
     print(f"[INFO] Server starting at {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.bind((HOST, PORT))
         server.listen(8)
         new_game.set()
-        threading.Thread(target=lobby_manager, daemon=True).start()
-        threading.Thread(target=spectator_announcer, daemon=True).start()
+        threading.Thread(target=lobby_manager, daemon=True).start() # Start lobby
+        threading.Thread(target=spectator_announcer, daemon=True).start() # Start lobby announcement loop
 
-
+        # Accept new client connections and start initilize thread
         while True:
             try:
                 conn, addr = server.accept()
@@ -430,4 +459,6 @@ if both are full and new game is set:
     run_two_player_game_online(player 1, player 2)
 :<-loop
 """
+
+
 
