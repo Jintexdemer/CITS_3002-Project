@@ -1,13 +1,3 @@
-"""
-Bugs:
-first input is delayed one line for all clients.
-
-doesnt add players back into client pool after game.
-
-spectating cannot like do anything.
-"""
-
-
 import socket
 import threading
 from queue import Queue
