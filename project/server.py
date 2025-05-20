@@ -1,10 +1,3 @@
-"""
-NEED TO ADD:
-RECONNECT FUNCTIONAILTY
-COMMENTS
-"""
-
-
 import socket
 import threading
 from queue import Queue
@@ -12,10 +5,7 @@ from battleship import run_two_player_game_online
 import time
 
 HOST = '127.0.0.1'
-PORT = 50045
-
-disconnected_players = []
-RECONNECT_TIMEOUT = 60
+PORT = 50046
 
 # Game state flags
 new_game = threading.Event()
@@ -24,13 +14,25 @@ game_active = threading.Event()
 # Input control flags: [spec, player1, player2]
 input_status_flags = [threading.Event(), threading.Event(), threading.Event()]
 
-clients = []  # List of all client dicts
+# clients contains ditcs for each client coneccted containing
+        # client_id:    unique id
+        # username:     given username
+        # p:            0 is a spectator, 1 is player1, 2 is player2.
+        # input_queue:  queue of client inputs 
+        # rfile:        read socket connection
+        # wfile:        write socket connection
+        # conn:         
+        # input_flag:
+clients = []
+
+# Queue containing clients 
 id_queue = Queue()
 
-# Player slots
+# Player client information slots
 player1 = None
 player2 = None
 
+# Unqiue client identifier
 client_id_counter = 0
 
 def spectator_announcer():
@@ -77,12 +79,11 @@ def spectator_announcer():
 
             # Send to all spectators
             for c in clients:
-                if c['p'] == 0:
-                    try:
-                        c['wfile'].write(msg)
-                        c['wfile'].flush()
-                    except:
-                        continue
+                try:
+                    c['wfile'].write(msg)
+                    c['wfile'].flush()
+                except:
+                    continue
             break
 
 
@@ -348,7 +349,6 @@ if __name__ == '__main__':
 
 
 
-
 """
 client_id queue()
 
@@ -361,20 +361,6 @@ clients = [id, p, inputQueue]  #p=0 is spec, p=1 is player 1, p=2 is player 2
 player1 = [input_status_flags[1], wfile, rfile, inputqueue]
 player2 = [input_status_flags[2], wfile, rfile, inputqueue]
 """
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 """
@@ -444,5 +430,4 @@ if both are full and new game is set:
     run_two_player_game_online(player 1, player 2)
 :<-loop
 """
-
 
