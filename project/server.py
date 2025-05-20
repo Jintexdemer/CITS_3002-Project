@@ -36,52 +36,55 @@ client_id_counter = 0
 def spectator_announcer():
     while True:
         time.sleep(15)
-        if not game_active.is_set():
-            continue
+        while True:
+            if not game_active.is_set():
+                break
 
-        # Clean invalid IDs from queue
-        while not id_queue.empty():
+            # Clean invalid IDs from queue
+            while not id_queue.empty():
+                id_list = list(id_queue.queue)
+                valid_ids = [c['client_id'] for c in clients]
+                if id_list[0] not in valid_ids:
+                    id_queue.get()  # remove invalid client
+                else:
+                    break  # first one is valid, continue
+
             id_list = list(id_queue.queue)
-            valid_ids = [c['client_id'] for c in clients]
-            if id_list[0] not in valid_ids:
-                id_queue.get()  # remove invalid client
+            next1 = next2 = None
+
+            # Determine next players
+            if len(id_list) >= 2:
+                cid1, cid2 = id_list[0], id_list[1]
+            elif len(id_list) == 1:
+                cid1 = id_list[0]
+                cid2 = player2['client_id'] if player2 else None
             else:
-                break  # first one is valid, continue
+                cid1 = player1['client_id'] if player1 else None
+                cid2 = player2['client_id'] if player2 else None
 
-        id_list = list(id_queue.queue)
-        next1 = next2 = None
+            # Get usernames
+            for c in clients:
+                if c['client_id'] == cid1:
+                    next1 = c['username']
+                if c['client_id'] == cid2:
+                    next2 = c['username']
 
-        # Determine next players
-        if len(id_list) >= 2:
-            cid1, cid2 = id_list[0], id_list[1]
-        elif len(id_list) == 1:
-            cid1 = id_list[0]
-            cid2 = player2['client_id'] if player2 else None
-        else:
-            cid1 = player1['client_id'] if player1 else None
-            cid2 = player2['client_id'] if player2 else None
+            # If still missing info, skip this cycle
+            if not next1 or not next2:
+                continue
 
-        # Get usernames
-        for c in clients:
-            if c['client_id'] == cid1:
-                next1 = c['username']
-            if c['client_id'] == cid2:
-                next2 = c['username']
+            msg = f"[INFO] After actve game ends: Next game will be between: {next1} and {next2}\n"
 
-        # If still missing info, skip this cycle
-        if not next1 or not next2:
-            continue
+            # Send to all spectators
+            for c in clients:
+                if c['p'] == 0:
+                    try:
+                        c['wfile'].write(msg)
+                        c['wfile'].flush()
+                    except:
+                        continue
+            break
 
-        msg = f"[INFO] After active game ends: Next game will be between: {next1} and {next2}\n"
-
-        # Send to all spectators
-        for c in clients:
-            if c['p'] == 0:
-                try:
-                    c['wfile'].write(msg)
-                    c['wfile'].flush()
-                except:
-                    continue
 
 # Function for handling the "CHAT" Feature
 def send_all(username, message):
