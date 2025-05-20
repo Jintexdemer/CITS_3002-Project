@@ -19,22 +19,26 @@ SHIPS = [
     ("Destroyer", 2)
 ]
 
+# Sends a message to all spectators (p=0)
 def send_to_all_p0_clients(clients, message):
     for client in clients:
         if client.get('p') == 0:
             send(client['wfile'], message)
 
+# Sends the board to all spectators (p=0)
 def send_board_to_all_p0_clients(clients, board):
     for client in clients:
         if client.get('p') == 0:
             send_board(client['wfile'], board)
 
+# Sends a message to client
 def send(wfile, msg):
     wfile.write(msg + '\n')
     wfile.flush()
 
 import queue  # for catching queue.Empty exception
 
+# Gets input from player client timeout 30seconds
 def recv(player_info):
     player_info['input_flag'].set()
     try:
@@ -44,6 +48,7 @@ def recv(player_info):
     player_info['input_flag'].clear()
     return result
 
+# Sends board message to client
 def send_board(wfile, board):
     wfile.write("GRID\n")
     wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
@@ -481,26 +486,28 @@ def run_single_player_game_online(rfile, wfile):
 
 
 def run_two_player_game_online(game, p1, p2, clients):
-    
+    # Unpack the read/write file objects for each player
     rfile1, wfile1 = p1
     rfile2, wfile2 = p2
 
+    # Inform players of their roles
     send(wfile1, "You are Player 1.")
     send(wfile2, "You are Player 2.")
     send_to_all_p0_clients(clients, "Game has started")
 
+    # Initialize boards for each player
     board1 = Board(BOARD_SIZE)
     board2 = Board(BOARD_SIZE)
 
-    #Place ships.
+    # Player 1 places ships
     send_to_all_p0_clients(clients, "Wait for Player 1 to place their ships.")
     send(wfile2, "Wait for Player 1 to place their ships...")
     send(wfile1, "Place ships manually (M) or randomly (R)? [M/R]: ")
     while True:
         
-        if not game.is_set(): return #Check if game is over
+        if not game.is_set(): return # Exit if game was ended
         Place = recv(rfile1).upper()
-        if not game.is_set(): return #Check if game is over
+        if not game.is_set(): return # Exit if game was ended
 
         if Place == 'M':
             board1.place_ships_manually_online(rfile1, wfile1, game, SHIPS)
@@ -511,15 +518,18 @@ def run_two_player_game_online(game, p1, p2, clients):
         else:
             send(wfile1, "Invalid input")
     
+    # Notify all clients that Player 1 is done placing ships
     if not game.is_set(): return
     send_to_all_p0_clients(clients, "Player 1 has placed their ships")
     send(wfile1, "Wait for Player 2 to place their ships...")
     send(wfile2, "Place ships manually (M) or randomly (R)? [M/R]: ")
+
+    # Player 2 places ships
     while True:
 
-        if not game.is_set(): return #Check if game is over
+        if not game.is_set(): return # Exit if game was ended
         Place = recv(rfile2).upper()
-        if not game.is_set(): return #Check if game is over
+        if not game.is_set(): return # Exit if game was ended
 
         if Place == 'M':
             board2.place_ships_manually_online(rfile2, wfile2, game, SHIPS)
@@ -529,34 +539,39 @@ def run_two_player_game_online(game, p1, p2, clients):
             break
         else:
             send(wfile2, "Invalid input")
+
+    # Clients are notified that the game has begun
     send_to_all_p0_clients(clients, "Player 2 has placed their ships")
     send(wfile1, "Welcome to Online Single-Player Battleship! Try to sink all the ships. Type 'quit' to exit.")
     send(wfile2, "Welcome to Online Single-Player Battleship! Try to sink all the ships. Type 'quit' to exit.")
 
-    moves = 0
+    moves = 0  # Track total number of moves
 
     while True:
-        if not game.is_set(): return #Check if game is over
+        if not game.is_set(): return # Exit if game was ended
 
-        # Player 1 turn
+        # === Player 1's Turn ===
         send_board(wfile1, board2)
         send_to_all_p0_clients(clients, "Waiting for player 1 turn...")
         send(wfile2, "Wait for player 1 turn...")
         send(wfile1, "Enter coordinate to fire at (e.g. B5):")
 
-        if not game.is_set(): return #Check if game is over
+        if not game.is_set(): return # Exit if game was ended
         guess = recv(rfile1)
-        if not game.is_set(): return #Check if game is over
+        if not game.is_set(): return # Exit if game was ended
         
         send(wfile2, f"Player 1 Inputs: {guess}")
         send_to_all_p0_clients(clients, f"Player 1 Inputs: {guess}")
+
         if guess.lower() == 'quit':
+            # Player 1 quits the game
             send(wfile1, "Thanks for playing. Goodbye.")
             send(wfile2, "Player 1 quit the game.")
             send_to_all_p0_clients(clients, "Player 1 quit the game.")
             game.clear()
             return
 
+        # Handle Player 1's guess
         try:
             row, col = parse_coordinate(guess)
             result, sunk_name = board2.fire_at(row, col)
@@ -564,6 +579,7 @@ def run_two_player_game_online(game, p1, p2, clients):
 
             if result == 'hit':
                 if sunk_name:
+                    # Player 1 sank a ship
                     send_to_all_p0_clients(clients, f"HIT! Player 1 sank the {sunk_name}!")
                     send(wfile1, f"HIT! You sank the {sunk_name}!")
                     send(wfile2, f"HIT! Player 1 sank the {sunk_name}!")
@@ -571,6 +587,8 @@ def run_two_player_game_online(game, p1, p2, clients):
                     send_to_all_p0_clients(clients, "Player 1: HIT!")
                     send(wfile1, "HIT!")
                     send(wfile2, "Player 1: HIT!")
+
+                # Check if all ships are sunk
                 if board2.all_ships_sunk():
                     send_board(wfile1, board2)
                     send_board(wfile2, board2)
@@ -593,8 +611,7 @@ def run_two_player_game_online(game, p1, p2, clients):
         
         send_board_to_all_p0_clients(clients, board2)
 
-        # Player 2 turn
-        
+        # === Player 2's Turn ===
         send_board(wfile2, board1)
         send_to_all_p0_clients(clients, "Waiting for player 2 turn...")
         send(wfile1, "Wait for player 2 turn...")
@@ -607,17 +624,20 @@ def run_two_player_game_online(game, p1, p2, clients):
         send(wfile1, f"Player 2 Inputs: {guess}")
         send_to_all_p0_clients(clients, f"Player 2 Inputs: {guess}")
         if guess.lower() == 'quit':
+            # Player 2 quits the game
             send(wfile2, "Thanks for playing. Goodbye.")
             send(wfile1, "Player 2 quit the game.")
             send_to_all_p0_clients(clients, "Player 2 quit the game.")
             return
         
+        # Handle Player 2's guess
         try:
             row, col = parse_coordinate(guess)
             result, sunk_name = board1.fire_at(row, col)
 
             if result == 'hit':
                 if sunk_name:
+                    # Player 2 sank a ship
                     send(wfile2, f"HIT! You sank the {sunk_name}!")
                     send(wfile1, f"HIT! Player 2 sank the {sunk_name}!")
                     send_to_all_p0_clients(clients,f"HIT! Player 2 sank the {sunk_name}!")
@@ -625,6 +645,8 @@ def run_two_player_game_online(game, p1, p2, clients):
                     send(wfile2, "HIT!")
                     send(wfile1, "Player 2: HIT!")
                     send_to_all_p0_clients(clients, "Player 2: HIT!")
+                
+                # Check if all ships are sunk
                 if board1.all_ships_sunk():
                     send_board(wfile2, board1)
                     send_board(wfile1, board1)
@@ -651,4 +673,4 @@ def run_two_player_game_online(game, p1, p2, clients):
 if __name__ == "__main__":
     # Optional: run this file as a script to test single-player mode
     run_single_player_game_locally()
-
+ 
